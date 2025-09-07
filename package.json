@@ -1,0 +1,18 @@
+{
+  "name": "frenchlang",
+  "version": "0.1.0",
+  "description": "Langage de programmation en français (.fl), simple et lisible pour le web et le backend",
+  "main": "src/interpreter.js",
+  "scripts": {
+    "start": "node src/interpreter.js examples/hello.fl"
+  },
+  "keywords": [
+    "french",
+    "programming",
+    "language",
+    "fl"
+  ],
+  "author": "Alberto67",
+  "license": "MIT",
+  "dependencies": {}
+}
