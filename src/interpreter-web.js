@@ -1,3 +1,14 @@
+// Charger core.js dynamiquement si on est dans le navigateur
+(function loadCore() {
+    if (typeof executeFrenchLang === "undefined") {
+        const script = document.createElement("script");
+        script.src = "https://frenchlang.onrender.com/src/core.js";
+        script.onload = () => console.log("Core FL chargé !");
+        script.onerror = () => console.error("Impossible de charger core.js !");
+        document.body.appendChild(script);
+    }
+})();
+
 const consoleFL = {
     msg: txt => appendLog(txt, "msg"),
     att: txt => appendLog(txt, "warn"),
