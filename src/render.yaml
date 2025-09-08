@@ -1,8 +1,0 @@
-static_site:
-  name: frenchlang
-  root: .
-  headers:
-    "/examples/*":
-      Access-Control-Allow-Origin: "*"
-    "/src/*":
-      Access-Control-Allow-Origin: "*"
