@@ -35,15 +35,25 @@ function executeFrenchLang(code, consoleFL) {
     };
 
     // ---------------------
-    // Exécution ligne par ligne
+    // Exécution ligne par ligne avec gestion des commentaires multi-lignes
     // ---------------------
     const lignes = code.split(/\r?\n/);
+    let inComment = false;
 
     lignes.forEach((ligne, index) => {
         ligne = ligne.trim();
 
-        // Ignorer lignes vides ou commentaires
-        if (!ligne || ligne.startsWith("#") || ligne.startsWith("/*")) return;
+        // Début d'un commentaire multi-lignes
+        if (ligne.startsWith("/*")) inComment = true;
+
+        // Si on est dans un commentaire, on ignore la ligne
+        if (inComment) {
+            if (ligne.endsWith("*/")) inComment = false; // fin du commentaire
+            return;
+        }
+
+        // Ignorer les lignes vides ou commentaires simples
+        if (!ligne || ligne.startsWith("#")) return;
 
         // Chercher quelle commande correspond
         let reconnue = false;
