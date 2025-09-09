@@ -125,7 +125,7 @@ function executeFrenchLang(code, consoleFL, parentScope = null) {
     expr = expr.trim();
 
     // Appel de fonction
-    const fnCall = expr.match(/^([a-zA-Z0-9_]+)\((.*)\)$/);
+    const args = splitArgs(callFn[2] || "").map(p => evalExpression(p));
     if (fnCall) {
         const fname = fnCall[1];
         const args = splitArgs(fnCall[2] || "").map(a => evalExpression(a, localVars));
@@ -141,14 +141,13 @@ function executeFrenchLang(code, consoleFL, parentScope = null) {
                     const retVal = parseArg(line, "retourner");
                     return evalExpression(retVal, funcLocalVars);
                 }
-                // Exécuter uniquement les commandes console
-                for (const cmd in commands) {
-                    if (line.startsWith(cmd + "(")) {
-                        const arg = parseArg(line, cmd);
-                        commands[cmd](arg);
-                        break;
-                    }
-                }
+                // Gestion des lignes "var x = ..." ou "def x = ..."
+                if (ligne.startsWith("var ") || ligne.startsWith("def ")) {
+                    const cmd = ligne.startsWith("var ") ? "var" : "def";
+                    const argText = ligne.slice(cmd.length).trim();
+                    commands[cmd](argText);
+                    reconnue = true;
+                } 
             }
         } catch(e) {
             if (e.type === "return") return e.value;
@@ -219,7 +218,7 @@ function executeFrenchLang(code, consoleFL, parentScope = null) {
                         line = line.trim();
                         if (line.startsWith("retourner(")) {
                             const retVal = parseArg(line, "retourner");
-                            throw { type: "return", value: evalArg(retVal, localVars) };
+                            throw { type: "return", value: evalExpression(retVal, localVars) };
                         }
 
                         let reconnue = false;
