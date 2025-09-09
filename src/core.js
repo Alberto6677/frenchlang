@@ -1,7 +1,7 @@
 // FrenchLang - Core logic (Node & Browser compatible)
 // ===================================================
 
-function executeFrenchLang(code, consoleFL) {
+function executeFrenchLang(code, consoleFL, parentScope = null) {
     if (!consoleFL) {
         consoleFL = {
             msg: console.log,
@@ -12,7 +12,10 @@ function executeFrenchLang(code, consoleFL) {
 
     const variables = {};
     const defs = {};
-    const functions = {}; // <-- stockage des fonctions utilisateur
+    const functions = {};
+
+    // Si on est dans une fonction, parentScope contient {variables, defs, functions} de l'appelant
+    const scope = parentScope || { variables, defs, functions };
 
     function parseArg(ligne, cmd) {
         const regex = new RegExp(`${cmd}\\((.*)\\)`);
@@ -44,19 +47,19 @@ function executeFrenchLang(code, consoleFL) {
                     parts.push(cur.trim()); cur = ""; continue;
                 }
             }
-
             cur += ch;
         }
         if (cur.trim() !== "") parts.push(cur.trim());
         return parts;
     }
 
-    function evalArg(arg) {
+    function evalArg(arg, localVars = {}) {
         arg = (arg || "").trim();
         if (arg === "") return "";
 
-        if (variables.hasOwnProperty(arg)) return variables[arg];
-        if (defs.hasOwnProperty(arg)) return defs[arg];
+        if (localVars.hasOwnProperty(arg)) return localVars[arg];
+        if (scope.variables.hasOwnProperty(arg)) return scope.variables[arg];
+        if (scope.defs.hasOwnProperty(arg)) return scope.defs[arg];
 
         if ((arg.startsWith('"') && arg.endsWith('"')) ||
             (arg.startsWith("'") && arg.endsWith("'"))) {
@@ -103,7 +106,7 @@ function executeFrenchLang(code, consoleFL) {
             const name = argText.slice(0, idx).trim();
             const valueExpr = argText.slice(idx + 1).trim();
             if (!name) throw new Error("Nom de variable vide");
-            variables[name] = evalArg(valueExpr);
+            scope.variables[name] = evalArg(valueExpr);
         },
         "def": argText => {
             const idx = argText.indexOf("=");
@@ -111,16 +114,16 @@ function executeFrenchLang(code, consoleFL) {
             const name = argText.slice(0, idx).trim();
             const valueExpr = argText.slice(idx + 1).trim();
             if (!name) throw new Error("Nom de def vide");
-            if (defs.hasOwnProperty(name)) {
+            if (scope.defs.hasOwnProperty(name)) {
                 throw new Error(`def '${name}' déjà défini`);
             }
-            defs[name] = evalArg(valueExpr);
+            scope.defs[name] = evalArg(valueExpr);
         }
     };
 
     const lignes = code.split(/\r?\n/);
     let inComment = false;
-    let inFunction = null; // si on est dans une fonction en train d’être définie
+    let inFunction = null;
     let buffer = [];
 
     try {
@@ -137,38 +140,73 @@ function executeFrenchLang(code, consoleFL) {
 
             // Début fonction
             if (ligne.startsWith("fonction ")) {
-                const name = ligne.match(/^fonction\s+([a-zA-Z0-9_]+)\s*\(\)\s*{$/);
-                if (!name) throw new Error(`Syntaxe fonction invalide à la ligne ${index+1}`);
-                inFunction = name[1];
+                const fnMatch = ligne.match(/^fonction\s+([a-zA-Z0-9_]+)\s*\((.*?)\)\s*{$/);
+                if (!fnMatch) throw new Error(`Syntaxe fonction invalide à la ligne ${index+1}`);
+                inFunction = fnMatch[1];
+                const params = fnMatch[2].split(",").map(p => p.trim()).filter(p => p);
                 buffer = [];
+                scope.functions[inFunction] = { params, body: buffer };
                 continue;
             }
 
             // Fin fonction
             if (inFunction && ligne === "}") {
-                functions[inFunction] = buffer.slice();
                 inFunction = null;
                 buffer = [];
                 continue;
             }
 
-            // Si on est dans une fonction → on enregistre les lignes
+            // Dans une fonction → enregistrer les lignes
             if (inFunction) {
                 buffer.push(ligne);
                 continue;
             }
 
-            // Appel de fonction
-            const callFn = ligne.match(/^([a-zA-Z0-9_]+)\(\)$/);
+            // Appel fonction avec arguments
+            const callFn = ligne.match(/^([a-zA-Z0-9_]+)\((.*?)\)$/);
             if (callFn) {
                 const fname = callFn[1];
-                if (!functions[fname]) throw new Error(`Fonction '${fname}' non définie`);
-                // exécuter son contenu récursivement
-                executeFrenchLang(functions[fname].join("\n"), consoleFL);
+                const args = splitArgs(callFn[2] || "").map(p => evalArg(p));
+                if (!scope.functions[fname]) throw new Error(`Fonction '${fname}' non définie`);
+
+                const localVars = {};
+                scope.functions[fname].params.forEach((p, i) => {
+                    localVars[p] = args[i];
+                });
+
+                try {
+                    for (let line of scope.functions[fname].body) {
+                        line = line.trim();
+                        if (line.startsWith("retourner(")) {
+                            const retVal = parseArg(line, "retourner");
+                            throw { type: "return", value: evalArg(retVal, localVars) };
+                        }
+
+                        let reconnue = false;
+                        for (const cmd in commands) {
+                            if (line.startsWith(cmd + "(")) {
+                                const arg = parseArg(line, cmd);
+                                commands[cmd](arg);
+                                reconnue = true;
+                                break;
+                            }
+                        }
+                        if (!reconnue) {
+                            throw new Error(`Ligne dans fonction non reconnue : ${line}`);
+                        }
+                    }
+                } catch (e) {
+                    if (e.type === "return") {
+                        // Renvoyer la valeur à l'appelant si nécessaire
+                        variables[fname] = e.value;
+                    } else {
+                        throw e;
+                    }
+                }
                 continue;
             }
 
-            // Sinon → commandes classiques
+            // Commandes classiques
             let reconnue = false;
             for (const cmd in commands) {
                 if (ligne.startsWith(cmd + "(")) {
