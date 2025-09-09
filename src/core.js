@@ -2,9 +2,6 @@
 // ===================================================
 
 function executeFrenchLang(code, consoleFL) {
-    // ---------------------
-    // Console par défaut
-    // ---------------------
     if (!consoleFL) {
         consoleFL = {
             msg: console.log,
@@ -13,15 +10,10 @@ function executeFrenchLang(code, consoleFL) {
         };
     }
 
-    // ---------------------
-    // Stockage des variables / defs
-    // ---------------------
     const variables = {};
     const defs = {};
+    const functions = {}; // <-- stockage des fonctions utilisateur
 
-    // ---------------------
-    // Utils
-    // ---------------------
     function parseArg(ligne, cmd) {
         const regex = new RegExp(`${cmd}\\((.*)\\)`);
         const match = ligne.match(regex);
@@ -89,12 +81,9 @@ function executeFrenchLang(code, consoleFL) {
 
     function joinAndLog(parts, fn) {
         const out = parts.map(toOutputText).join(" ");
-        fn(out + "\n"); //<< ajout retour ligne systématique
+        fn(out + "\n");
     }
 
-    // ---------------------
-    // Commandes
-    // ---------------------
     const commands = {
         "console.msg": argText => {
             const parts = splitArgs(argText).map(p => evalArg(p));
@@ -129,11 +118,10 @@ function executeFrenchLang(code, consoleFL) {
         }
     };
 
-    // ---------------------
-    // Exécution
-    // ---------------------
     const lignes = code.split(/\r?\n/);
     let inComment = false;
+    let inFunction = null; // si on est dans une fonction en train d’être définie
+    let buffer = [];
 
     try {
         for (let index = 0; index < lignes.length; index++) {
@@ -147,6 +135,40 @@ function executeFrenchLang(code, consoleFL) {
 
             if (!ligne || ligne.startsWith("#")) continue;
 
+            // Début fonction
+            if (ligne.startsWith("fonction ")) {
+                const name = ligne.match(/^fonction\s+([a-zA-Z0-9_]+)\s*\(\)\s*{$/);
+                if (!name) throw new Error(`Syntaxe fonction invalide à la ligne ${index+1}`);
+                inFunction = name[1];
+                buffer = [];
+                continue;
+            }
+
+            // Fin fonction
+            if (inFunction && ligne === "}") {
+                functions[inFunction] = buffer.slice();
+                inFunction = null;
+                buffer = [];
+                continue;
+            }
+
+            // Si on est dans une fonction → on enregistre les lignes
+            if (inFunction) {
+                buffer.push(ligne);
+                continue;
+            }
+
+            // Appel de fonction
+            const callFn = ligne.match(/^([a-zA-Z0-9_]+)\(\)$/);
+            if (callFn) {
+                const fname = callFn[1];
+                if (!functions[fname]) throw new Error(`Fonction '${fname}' non définie`);
+                // exécuter son contenu récursivement
+                executeFrenchLang(functions[fname].join("\n"), consoleFL);
+                continue;
+            }
+
+            // Sinon → commandes classiques
             let reconnue = false;
             for (const cmd in commands) {
                 if (ligne.startsWith(cmd + "(")) {
@@ -162,12 +184,10 @@ function executeFrenchLang(code, consoleFL) {
             }
         }
     } catch (e) {
-        // une seule erreur imprévue, on arrête tout
         consoleFL.err("Erreur : " + e.message + "\n");
     }
 }
 
-// Pour Node.js
 if (typeof module !== "undefined" && module.exports) {
     module.exports = executeFrenchLang;
 }
