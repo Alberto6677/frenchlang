@@ -17,7 +17,7 @@ const consoleFL = {
 
 function appendLog(txt, type) {
     const span = document.createElement("span");
-    //span.textContent = txt + "\n";
+    span.textContent = txt; //ajouter + "\n" si besoin
     if(type === "warn") span.style.color = "orange";
     if(type === "error") span.style.color = "red";
     document.getElementById("logs").appendChild(span);
