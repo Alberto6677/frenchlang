@@ -29,12 +29,35 @@ function executeFrenchLang(code, consoleFL) {
     }
 
     // ---------------------
+    // Fonction pour évaluer un argument avec accès aux variables/defs
+    // ---------------------
+    function evalArg(arg) {
+        arg = arg.trim();
+        if (variables[arg] !== undefined) return variables[arg];
+        if (defs[arg] !== undefined) return defs[arg];
+        try {
+            return eval(arg); // si c’est du JS valide (ex: "2+2")
+        } catch {
+            return arg; // sinon on renvoie brut
+        }
+    }
+
+    // ---------------------
     // Commandes FrenchLang
     // ---------------------
     const commands = {
-        "console.msg": arg => consoleFL.msg(evalArg(arg)),
-        "console.att": arg => consoleFL.att(evalArg(arg)),
-        "console.err": arg => consoleFL.err(evalArg(arg)),
+        "console.msg": arg => {
+            const parts = arg.split(",").map(p => evalArg(p));
+            consoleFL.msg(...parts);
+        },
+        "console.att": arg => {
+            const parts = arg.split(",").map(p => evalArg(p));
+            consoleFL.att(...parts);
+        },
+        "console.err": arg => {
+            const parts = arg.split(",").map(p => evalArg(p));
+            consoleFL.err(...parts);
+        },
 
         // Définir une variable mutable
         "var": arg => {
@@ -42,7 +65,7 @@ function executeFrenchLang(code, consoleFL) {
             variables[name] = evalArg(value);
         },
 
-        // Définir une constante / fonction
+        // Définir une constante
         "def": arg => {
             const [name, value] = arg.split("=").map(s => s.trim());
             if (defs[name] !== undefined) {
@@ -52,20 +75,6 @@ function executeFrenchLang(code, consoleFL) {
             }
         }
     };
-
-    // ---------------------
-    // Fonction pour évaluer un argument avec accès aux variables/defs
-    // ---------------------
-    function evalArg(arg) {
-        // Remplacer les noms de variables/defs par leur valeur
-        if (variables[arg] !== undefined) return variables[arg];
-        if (defs[arg] !== undefined) return defs[arg];
-        try {
-            return eval(arg); // si c’est du JS valide (ex: "2+2")
-        } catch {
-            return arg; // sinon on renvoie brut
-        }
-    }
 
     // ---------------------
     // Exécution ligne par ligne
