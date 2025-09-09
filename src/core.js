@@ -74,38 +74,58 @@ function executeFrenchLang(code, consoleFL, parentScope = null) {
         fn(out + "\n");
     }
 
-    // Eval expression : valeur simple ou appel de fonction
     function evalExpression(expr, localVars = {}) {
-        expr = expr.trim();
-        const fnCall = expr.match(/^([a-zA-Z0-9_]+)\((.*)\)$/);
-        if (fnCall) {
-            const fname = fnCall[1];
-            const args = splitArgs(fnCall[2] || "").map(a => evalExpression(a, localVars));
-            if (!scope.functions[fname]) throw new Error(`Fonction '${fname}' non définie`);
+    expr = expr.trim();
 
-            const funcLocalVars = {};
-            scope.functions[fname].params.forEach((p, i) => funcLocalVars[p] = args[i]);
+    // Remplacer les variables locales et globales par leur valeur
+    for (const v in localVars) {
+        const re = new RegExp(`\\b${v}\\b`, "g");
+        expr = expr.replace(re, JSON.stringify(localVars[v]));
+    }
+    for (const v in scope.variables) {
+        const re = new RegExp(`\\b${v}\\b`, "g");
+        expr = expr.replace(re, JSON.stringify(scope.variables[v]));
+    }
+    for (const v in scope.defs) {
+        const re = new RegExp(`\\b${v}\\b`, "g");
+        expr = expr.replace(re, JSON.stringify(scope.defs[v]));
+    }
 
-            for (let line of scope.functions[fname].body) {
-                line = line.trim();
-                // Retour de fonction
-                if (line.startsWith("retourner(")) {
-                    const retVal = parseArg(line, "retourner");
-                    return evalExpression(retVal, funcLocalVars);
-                }
-                // Exécution commandes console dans fonction
-                for (const cmd in commands) {
-                    if (line.startsWith(cmd + "(")) {
-                        const arg = parseArg(line, cmd);
-                        commands[cmd](arg, funcLocalVars);
-                        break;
-                    }
+    // Appel de fonction
+    const fnCall = expr.match(/^([a-zA-Z0-9_]+)\((.*)\)$/);
+    if (fnCall) {
+        const fname = fnCall[1];
+        const args = splitArgs(fnCall[2] || "").map(a => evalExpression(a, localVars));
+        if (!scope.functions[fname]) throw new Error(`Fonction '${fname}' non définie`);
+
+        const funcLocalVars = {};
+        scope.functions[fname].params.forEach((p, i) => funcLocalVars[p] = args[i]);
+
+        for (let line of scope.functions[fname].body) {
+            line = line.trim();
+            if (line.startsWith("retourner(")) {
+                const retVal = parseArg(line, "retourner");
+                return evalExpression(retVal, funcLocalVars);
+            }
+            for (const cmd in commands) {
+                if (line.startsWith(cmd + "(")) {
+                    const arg = parseArg(line, cmd);
+                    commands[cmd](arg, funcLocalVars);
+                    break;
                 }
             }
-            return undefined;
         }
-        return evalArg(expr, localVars);
+        return undefined;
     }
+
+    // Sinon évaluer l’expression JS complète
+    try {
+        return eval(expr);
+    } catch {
+        return expr;
+    }
+}
+
 
     // Commandes principales
     const commands = {
