@@ -1,10 +1,9 @@
 // FrenchLang - Core logic (Node & Browser compatible)
 // ===================================================
-// Interpréteur de FrenchLang (.fl) simple, lisible et facilement modifiable
 
 function executeFrenchLang(code, consoleFL) {
     // ---------------------
-    // Configuration console par défaut
+    // Console par défaut
     // ---------------------
     if (!consoleFL) {
         consoleFL = {
@@ -15,7 +14,13 @@ function executeFrenchLang(code, consoleFL) {
     }
 
     // ---------------------
-    // Fonction utilitaire pour extraire l’argument d’une commande
+    // Stockage des variables
+    // ---------------------
+    const variables = {};
+    const defs = {};
+
+    // ---------------------
+    // Fonction utilitaire pour extraire l’argument
     // ---------------------
     function parseArg(ligne, cmd) {
         const regex = new RegExp(`${cmd}\\((.*)\\)`);
@@ -24,18 +29,46 @@ function executeFrenchLang(code, consoleFL) {
     }
 
     // ---------------------
-    // Définition des commandes FrenchLang
-    // Pour ajouter une commande : ajouter une nouvelle clé dans cet objet
-    // Exemple : "console.boum": arg => consoleFL.msg("BOUM : " + eval(arg))
+    // Commandes FrenchLang
     // ---------------------
     const commands = {
-        "console.msg": arg => consoleFL.msg(eval(arg)),
-        "console.att": arg => consoleFL.att(eval(arg)),
-        "console.err": arg => consoleFL.err(eval(arg))
+        "console.msg": arg => consoleFL.msg(evalArg(arg)),
+        "console.att": arg => consoleFL.att(evalArg(arg)),
+        "console.err": arg => consoleFL.err(evalArg(arg)),
+
+        // Définir une variable mutable
+        "var": arg => {
+            const [name, value] = arg.split("=").map(s => s.trim());
+            variables[name] = evalArg(value);
+        },
+
+        // Définir une constante / fonction
+        "def": arg => {
+            const [name, value] = arg.split("=").map(s => s.trim());
+            if (defs[name] !== undefined) {
+                consoleFL.err(`Erreur : def '${name}' est déjà défini !`);
+            } else {
+                defs[name] = evalArg(value);
+            }
+        }
     };
 
     // ---------------------
-    // Exécution ligne par ligne avec gestion des commentaires multi-lignes
+    // Fonction pour évaluer un argument avec accès aux variables/defs
+    // ---------------------
+    function evalArg(arg) {
+        // Remplacer les noms de variables/defs par leur valeur
+        if (variables[arg] !== undefined) return variables[arg];
+        if (defs[arg] !== undefined) return defs[arg];
+        try {
+            return eval(arg); // si c’est du JS valide (ex: "2+2")
+        } catch {
+            return arg; // sinon on renvoie brut
+        }
+    }
+
+    // ---------------------
+    // Exécution ligne par ligne
     // ---------------------
     const lignes = code.split(/\r?\n/);
     let inComment = false;
@@ -43,19 +76,14 @@ function executeFrenchLang(code, consoleFL) {
     lignes.forEach((ligne, index) => {
         ligne = ligne.trim();
 
-        // Début d'un commentaire multi-lignes
         if (ligne.startsWith("/*")) inComment = true;
-
-        // Si on est dans un commentaire, on ignore la ligne
         if (inComment) {
-            if (ligne.endsWith("*/")) inComment = false; // fin du commentaire
+            if (ligne.endsWith("*/")) inComment = false;
             return;
         }
 
-        // Ignorer les lignes vides ou commentaires simples
         if (!ligne || ligne.startsWith("#")) return;
 
-        // Chercher quelle commande correspond
         let reconnue = false;
         for (const cmd in commands) {
             if (ligne.startsWith(cmd + "(")) {
@@ -66,7 +94,6 @@ function executeFrenchLang(code, consoleFL) {
             }
         }
 
-        // Commande non reconnue
         if (!reconnue) {
             consoleFL.msg(`Ligne ${index + 1} non reconnue : ${ligne}`);
         }
