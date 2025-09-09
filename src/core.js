@@ -106,7 +106,7 @@ function executeFrenchLang(code, consoleFL, parentScope = null) {
             const name = argText.slice(0, idx).trim();
             const valueExpr = argText.slice(idx + 1).trim();
             if (!name) throw new Error("Nom de variable vide");
-            scope.variables[name] = evalArg(valueExpr);
+            scope.variables[name] = evalExpression(valueExpr);
         },
         "def": argText => {
             const idx = argText.indexOf("=");
@@ -120,6 +120,46 @@ function executeFrenchLang(code, consoleFL, parentScope = null) {
             scope.defs[name] = evalArg(valueExpr);
         }
     };
+
+    function evalExpression(expr, localVars = {}) {
+    expr = expr.trim();
+
+    // Appel de fonction
+    const fnCall = expr.match(/^([a-zA-Z0-9_]+)\((.*)\)$/);
+    if (fnCall) {
+        const fname = fnCall[1];
+        const args = splitArgs(fnCall[2] || "").map(a => evalExpression(a, localVars));
+        if (!scope.functions[fname]) throw new Error(`Fonction '${fname}' non définie`);
+
+        const funcLocalVars = {};
+        scope.functions[fname].params.forEach((p, i) => funcLocalVars[p] = args[i]);
+
+        try {
+            for (let line of scope.functions[fname].body) {
+                line = line.trim();
+                if (line.startsWith("retourner(")) {
+                    const retVal = parseArg(line, "retourner");
+                    return evalExpression(retVal, funcLocalVars);
+                }
+                // Exécuter uniquement les commandes console
+                for (const cmd in commands) {
+                    if (line.startsWith(cmd + "(")) {
+                        const arg = parseArg(line, cmd);
+                        commands[cmd](arg);
+                        break;
+                    }
+                }
+            }
+        } catch(e) {
+            if (e.type === "return") return e.value;
+            throw e;
+        }
+        return undefined;
+    }
+
+    // Sinon valeur simple
+    return evalArg(expr, localVars);
+}
 
     const lignes = code.split(/\r?\n/);
     let inComment = false;
