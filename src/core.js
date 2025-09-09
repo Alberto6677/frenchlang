@@ -1,7 +1,7 @@
 // FrenchLang - Core logic (Node & Browser compatible)
 // ===================================================
 
-function executeFrenchLang(code, consoleFL, parentScope = null) {
+async function executeFrenchLang(code, consoleFL, parentScope = null) {
     if (!consoleFL) {
         consoleFL = {
             msg: console.log,
@@ -74,7 +74,7 @@ function executeFrenchLang(code, consoleFL, parentScope = null) {
         fn(out + "\n");
     }
 
-    function evalExpression(expr, localVars = {}) {
+   async function evalExpression(expr, localVars = {}) {
     expr = expr.trim();
 
     // Remplacer les variables locales et globales par leur valeur
@@ -157,6 +157,22 @@ function executeFrenchLang(code, consoleFL, parentScope = null) {
             if (!name) throw new Error("Nom de def vide");
             if (scope.defs.hasOwnProperty(name)) throw new Error(`def '${name}' déjà défini`);
             scope.defs[name] = evalExpression(valueExpr, localVars);
+        }, 
+        "attendre": async argText => {
+            let t = argText.trim();
+            let ms = 0;
+
+            if (t.endsWith("ms")) {
+                ms = parseFloat(t.slice(0, -2));
+            } else if (t.endsWith("s")) {
+                ms = parseFloat(t.slice(0, -1)) * 1000;
+            } else {
+                ms = parseFloat(t); // par défaut en ms
+            }
+
+            if (isNaN(ms)) throw new Error(`Temps invalide pour attendre: ${argText}`);
+
+            await new Promise(resolve => setTimeout(resolve, ms));
         }
     };
 
@@ -233,7 +249,7 @@ function executeFrenchLang(code, consoleFL, parentScope = null) {
             for (const cmd in commands) {
                 if (ligne.startsWith(cmd + "(")) {
                     const arg = parseArg(ligne, cmd);
-                    commands[cmd](arg);
+                    await commands[cmd](arg);
                     reconnue = true;
                     break;
                 }
