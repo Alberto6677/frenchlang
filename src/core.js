@@ -105,7 +105,7 @@ async function executeFrenchLang(code, consoleFL, parentScope = null) {
             line = line.trim();
             if (line.startsWith("retourner(")) {
                 const retVal = parseArg(line, "retourner");
-                return evalExpression(retVal, funcLocalVars);
+                return await evalExpression(retVal, funcLocalVars);
             }
             for (const cmd in commands) {
                 if (line.startsWith(cmd + "(")) {
