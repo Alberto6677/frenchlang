@@ -14,13 +14,13 @@ function executeFrenchLang(code, consoleFL) {
     }
 
     // ---------------------
-    // Stockage des variables
+    // Stockage des variables / defs
     // ---------------------
     const variables = {};
     const defs = {};
 
     // ---------------------
-    // Fonction utilitaire pour extraire l’argument
+    // Utils : parseArg (récupère le contenu entre parenthèses)
     // ---------------------
     function parseArg(ligne, cmd) {
         const regex = new RegExp(`${cmd}\\((.*)\\)`);
@@ -29,61 +29,157 @@ function executeFrenchLang(code, consoleFL) {
     }
 
     // ---------------------
-    // Fonction pour évaluer un argument avec accès aux variables/defs
+    // Utils : splitArgs - découpe une chaîne par virgule MAIS
+    // en ignorant les virgules qui sont à l'intérieur de guillemets
+    // ou à l'intérieur de parenthèses imbriquées.
+    // ---------------------
+    function splitArgs(s) {
+        const parts = [];
+        let cur = "";
+        let inSingle = false;
+        let inDouble = false;
+        let depth = 0;
+        for (let i = 0; i < s.length; i++) {
+            const ch = s[i];
+            const prev = s[i - 1];
+
+            if (ch === "'" && !inDouble && prev !== "\\") {
+                inSingle = !inSingle;
+                cur += ch;
+                continue;
+            }
+            if (ch === '"' && !inSingle && prev !== "\\") {
+                inDouble = !inDouble;
+                cur += ch;
+                continue;
+            }
+
+            if (!inSingle && !inDouble) {
+                if (ch === "(") {
+                    depth++;
+                    cur += ch;
+                    continue;
+                } else if (ch === ")") {
+                    depth = Math.max(0, depth - 1);
+                    cur += ch;
+                    continue;
+                } else if (ch === "," && depth === 0) {
+                    parts.push(cur.trim());
+                    cur = "";
+                    continue;
+                }
+            }
+
+            cur += ch;
+        }
+        if (cur.trim() !== "") parts.push(cur.trim());
+        return parts;
+    }
+
+    // ---------------------
+    // Evaluer un argument : variable, def, expression JS, ou littéral
     // ---------------------
     function evalArg(arg) {
-        arg = arg.trim();
-        if (variables[arg] !== undefined) return variables[arg];
-        if (defs[arg] !== undefined) return defs[arg];
-        try {
-            return eval(arg); // si c’est du JS valide (ex: "2+2")
-        } catch {
-            return arg; // sinon on renvoie brut
+        arg = (arg || "").trim();
+        if (arg === "") return "";
+
+        // variable name exactly
+        if (variables.hasOwnProperty(arg)) return variables[arg];
+        if (defs.hasOwnProperty(arg)) return defs[arg];
+
+        // string literal (starts/ends with quotes) -> use eval to parse escapes
+        if ((arg.startsWith('"') && arg.endsWith('"')) ||
+            (arg.startsWith("'") && arg.endsWith("'"))) {
+            try { return eval(arg); } catch (e) { /* fallthrough */ }
         }
+
+        // try to evaluate numeric / expression
+        try {
+            // allow expressions like 3+4, or `"a".toUpperCase()`, etc.
+            return eval(arg);
+        } catch (e) {
+            // fallback : return raw token (e.g., bare word not defined)
+            return arg;
+        }
+    }
+
+    // ---------------------
+    // Format pour affichage : objets => JSON, autres => String
+    // ---------------------
+    function toOutputText(v) {
+        if (v === null) return "null";
+        if (v === undefined) return "undefined";
+        if (typeof v === "object") {
+            try { return JSON.stringify(v); } catch { return String(v); }
+        }
+        return String(v);
     }
 
     // ---------------------
     // Commandes FrenchLang
     // ---------------------
     const commands = {
-        "console.msg": arg => {
-            const parts = arg.split(",").map(p => evalArg(p));
-            consoleFL.msg(...parts);
+        "console.msg": argText => {
+            const parts = splitArgs(argText).map(p => evalArg(p));
+            const out = parts.map(toOutputText).join(" ");
+            consoleFL.msg(out);
         },
-        "console.att": arg => {
-            const parts = arg.split(",").map(p => evalArg(p));
-            consoleFL.att(...parts);
+        "console.att": argText => {
+            const parts = splitArgs(argText).map(p => evalArg(p));
+            const out = parts.map(toOutputText).join(" ");
+            consoleFL.att(out);
         },
-        "console.err": arg => {
-            const parts = arg.split(",").map(p => evalArg(p));
-            consoleFL.err(...parts);
-        },
-
-        // Définir une variable mutable
-        "var": arg => {
-            const [name, value] = arg.split("=").map(s => s.trim());
-            variables[name] = evalArg(value);
+        "console.err": argText => {
+            const parts = splitArgs(argText).map(p => evalArg(p));
+            const out = parts.map(toOutputText).join(" ");
+            consoleFL.err(out);
         },
 
-        // Définir une constante
-        "def": arg => {
-            const [name, value] = arg.split("=").map(s => s.trim());
-            if (defs[name] !== undefined) {
-                consoleFL.err(`Erreur : def '${name}' est déjà défini !`);
-            } else {
-                defs[name] = evalArg(value);
+        // var(name = value)
+        "var": argText => {
+            const idx = argText.indexOf("=");
+            if (idx === -1) {
+                consoleFL.err("Syntaxe var incorrecte : var(name = value)");
+                return;
             }
+            const name = argText.slice(0, idx).trim();
+            const valueExpr = argText.slice(idx + 1).trim();
+            if (!name) {
+                consoleFL.err("Nom de variable vide");
+                return;
+            }
+            variables[name] = evalArg(valueExpr);
+        },
+
+        // def(name = value) - immuable
+        "def": argText => {
+            const idx = argText.indexOf("=");
+            if (idx === -1) {
+                consoleFL.err("Syntaxe def incorrecte : def(name = value)");
+                return;
+            }
+            const name = argText.slice(0, idx).trim();
+            const valueExpr = argText.slice(idx + 1).trim();
+            if (!name) {
+                consoleFL.err("Nom de def vide");
+                return;
+            }
+            if (defs.hasOwnProperty(name)) {
+                consoleFL.err(`Erreur : def '${name}' est déjà défini !`);
+                return;
+            }
+            defs[name] = evalArg(valueExpr);
         }
     };
 
     // ---------------------
-    // Exécution ligne par ligne
+    // Exécution ligne par ligne (gestion commentaires multi-lignes)
     // ---------------------
     const lignes = code.split(/\r?\n/);
     let inComment = false;
 
     lignes.forEach((ligne, index) => {
-        ligne = ligne.trim();
+        ligne = (ligne || "").trim();
 
         if (ligne.startsWith("/*")) inComment = true;
         if (inComment) {
@@ -97,7 +193,11 @@ function executeFrenchLang(code, consoleFL) {
         for (const cmd in commands) {
             if (ligne.startsWith(cmd + "(")) {
                 const arg = parseArg(ligne, cmd);
-                commands[cmd](arg);
+                try {
+                    commands[cmd](arg);
+                } catch (e) {
+                    consoleFL.err(`Erreur ligne ${index + 1} (${cmd}): ${e}`);
+                }
                 reconnue = true;
                 break;
             }
