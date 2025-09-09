@@ -13,23 +13,19 @@ Il permet de créer des scripts facilement, avec une syntaxe compréhensible par
 
 ---
 
-## Syntaxe de base
+## Syntaxe
 
-Exemples :
+FrenchLang est un langage qui a une syntaxe similaire au JavaScript mais en français !
 
-```fl
-console.msg("Bonjour !")       # Affiche un message normal
-console.att("Attention !")     # Affiche un avertissement
-console.err("Erreur !")        # Affiche une erreur
-
-variable nom = "Alberto"
-
-si (nom == "Alberto") {
-    console.msg("Bienvenue créateur !")
-} sinon {
-    console.msg("Bienvenue visiteur.")
-}
-
-répète 3 fois {
-    console.msg("Vive FrenchLang !")
-}
+### Console
+- ```console.msg(msg) Log un message```
+- ```console.att(att) Log un avertisement```
+- ```console.err(err) Log une erreur```
+### Variables
+- ```var(nom = valeur) definit nom sur valeur```
+- ```def(nom = valeur) definit et bloque (on peut plus redefinir nom) nom sur valeur```
+### Fonctions
+- ```fonction nom {```
+  ```(actions)```
+```} Definit la fonction nom```
+- ```nom() Utilise la fonction nom```
