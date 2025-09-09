@@ -95,7 +95,7 @@ async function executeFrenchLang(code, consoleFL, parentScope = null) {
     const fnCall = expr.match(/^([a-zA-Z0-9_]+)\((.*)\)$/);
     if (fnCall) {
         const fname = fnCall[1];
-        const args = splitArgs(fnCall[2] || "").map(a => evalExpression(a, localVars));
+        const args = await Promise.all(splitArgs(callFn[2] || "").map(p => evalExpression(p)));
         if (!scope.functions[fname]) throw new Error(`Fonction '${fname}' non définie`);
 
         const funcLocalVars = {};
@@ -216,7 +216,7 @@ async function executeFrenchLang(code, consoleFL, parentScope = null) {
             const callFn = ligne.match(/^([a-zA-Z0-9_]+)\((.*)\)$/);
             if (callFn) {
                 const fname = callFn[1];
-                const args = splitArgs(callFn[2] || "").map(p => evalExpression(p));
+                const args = await Promise.all(splitArgs(fnCall[2] || "").map(a => evalExpression(a, localVars)));
                 if (!scope.functions[fname]) throw new Error(`Fonction '${fname}' non définie`);
 
                 const localVars = {};
