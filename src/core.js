@@ -89,7 +89,7 @@ function executeFrenchLang(code, consoleFL) {
 
     function joinAndLog(parts, fn) {
         const out = parts.map(toOutputText).join(" ");
-        // fn(out + "\n"); << ajout retour ligne systématique
+        fn(out + "\n"); //<< ajout retour ligne systématique
     }
 
     // ---------------------
