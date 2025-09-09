@@ -110,7 +110,7 @@ async function executeFrenchLang(code, consoleFL, parentScope = null) {
             for (const cmd in commands) {
                 if (line.startsWith(cmd + "(")) {
                     const arg = parseArg(line, cmd);
-                    commands[cmd](arg, funcLocalVars);
+                    await commands[cmd](arg, funcLocalVars);
                     break;
                 }
             }
