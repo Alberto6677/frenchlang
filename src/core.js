@@ -70,10 +70,15 @@ async function executeFrenchLang(code, consoleFL, parentScope = null) {
         "console.att": async (argText, localVars={}) => joinAndLog(await Promise.all(splitArgs(argText).map(p=>evalExpression(p, localVars))), consoleFL.att),
         "console.err": async (argText, localVars={}) => joinAndLog(await Promise.all(splitArgs(argText).map(p=>evalExpression(p, localVars))), consoleFL.err),
         "console.a67": async (argText, localVars={}) => {
-            const msg = String(await evalExpression(argText, localVars));
-            let fmt = "", styles = [];
-            for (let i=0;i<msg.length;i++) { fmt+="%c"+msg[i]; styles.push(`color:${colors[i%colors.length]}`); }
-            consoleFL.msg(fmt, ...styles);
+            const parts = await Promise.all(splitArgs(argText).map(p => evalExpression(p, localVars)));
+            joinAndLog(parts, txt => {
+                // simple bleu
+                if (typeof document !== "undefined") {
+                    console.log("%c" + txt, "color:blue");
+                } else {
+                    console.log(txt);
+                }
+            });
         },
         "var": async (argText, localVars={}) => { const idx=argText.indexOf("="); if(idx==-1) throw new Error("Syntaxe var incorrecte"); const name=argText.slice(0,idx).trim(); const val=argText.slice(idx+1).trim(); scope.variables[name]=await evalExpression(val, localVars); },
         "def": async (argText, localVars={}) => { const idx=argText.indexOf("="); if(idx==-1) throw new Error("Syntaxe def incorrecte"); const name=argText.slice(0,idx).trim(); if(scope.defs[name]) throw new Error(`def '${name}' déjà défini`); const val=argText.slice(idx+1).trim(); scope.defs[name]=await evalExpression(val, localVars); },
