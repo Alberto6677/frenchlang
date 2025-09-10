@@ -237,16 +237,58 @@ async function executeFrenchLang(code, consoleFL, parentScope = null) {
                 continue;
             }
 
-            // Commandes console globales
-            let reconnue = false;
-            for (const cmd in commands) {
-                if (ligne.startsWith(cmd + "(")) {
-                    const arg = parseArg(ligne, cmd);
-                    await commands[cmd](arg);
-                    reconnue = true;
-                    break;
+            // Commandes globales (console + attendre)
+let reconnue = false;
+for (const cmd in commands) {
+    if (ligne.startsWith(cmd + "(")) {
+        const arg = parseArg(ligne, cmd);
+        await commands[cmd](arg);
+        reconnue = true;
+        break;
+    }
+}
+if (!reconnue) {
+    // Appel de fonction user-defined
+    const callFn = ligne.match(/^([a-zA-Z0-9_]+)\((.*)\)$/);
+    if (callFn) {
+        const fname = callFn[1];
+        const args = await Promise.all(splitArgs(callFn[2] || "").map(p => evalExpression(p)));
+        if (commands[fname]) {
+            // Si c’est une commande globale comme attendre
+            await commands[fname](args.join(",")); 
+            reconnue = true;
+        } else if (scope.functions[fname]) {
+            // Fonction définie par l’utilisateur
+            const localVars = {};
+            scope.functions[fname].params.forEach((p, i) => localVars[p] = args[i]);
+            try {
+                for (let line of scope.functions[fname].body) {
+                    line = line.trim();
+                    if (line.startsWith("retourner(")) {
+                        const retVal = parseArg(line, "retourner");
+                        throw { type: "return", value: await evalExpression(retVal, localVars) };
+                    }
+                    for (const cmd in commands) {
+                        if (line.startsWith(cmd + "(")) {
+                            const arg = parseArg(line, cmd);
+                            await commands[cmd](arg, localVars);
+                            break;
+                        }
+                    }
                 }
+            } catch (e) {
+                if (e.type === "return") { variables[fname] = e.value; } 
+                else { throw e; }
             }
+            reconnue = true;
+        } else {
+            throw new Error(`Ligne ${index+1} non reconnue : ${ligne}`);
+        }
+    } else {
+        throw new Error(`Ligne ${index+1} non reconnue : ${ligne}`);
+    }
+}
+
 
             if (!reconnue) throw new Error(`Ligne ${index+1} non reconnue : ${ligne}`);
         }
