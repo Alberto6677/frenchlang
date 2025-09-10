@@ -76,7 +76,20 @@ async function executeFrenchLang(code, consoleFL, parentScope = null) {
             else ms=parseFloat(t);
             if(isNaN(ms)) throw new Error(`Temps invalide pour attendre: ${argText}`);
             await new Promise(r=>setTimeout(r,ms));
-        }
+        }, "console.a67" = async (argText, localVars = {}) => {
+    const msg = await evalExpression(argText, localVars);
+    const text = String(msg);
+    const colors = ["red", "orange", "yellow", "green", "cyan", "blue", "magenta"];
+    let formatted = "";
+    const styles = [];
+
+    for (let i = 0; i < text.length; i++) {
+        formatted += "%c" + text[i];
+        styles.push(`color:${colors[i % colors.length]}`);
+    }
+
+    consoleFL.msg(formatted, ...styles);
+};
     };
 
     const lignes = code.split(/\r?\n/);
