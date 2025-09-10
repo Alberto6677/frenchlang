@@ -1,9 +1,8 @@
 // FrenchLang - Core logic (Node & Browser compatible)
-async function executeFrenchLang(code, consoleFL, parentScope = null) {
-    if (!consoleFL) {
-        consoleFL = { msg: console.log, att: console.warn, err: console.error };
-    }
+// =========================================================
 
+async function executeFrenchLang(code, consoleFL, parentScope = null) {
+    if (!consoleFL) consoleFL = { msg: console.log, att: console.warn, err: console.error };
     const variables = {};
     const defs = {};
     const functions = {};
@@ -27,9 +26,9 @@ async function executeFrenchLang(code, consoleFL, parentScope = null) {
                 if (ch === ")") { depth=Math.max(0,depth-1); cur+=ch; continue; }
                 if (ch === "," && depth===0) { parts.push(cur.trim()); cur=""; continue; }
             }
-            cur += ch;
+            cur+=ch;
         }
-        if (cur.trim() !== "") parts.push(cur.trim());
+        if (cur.trim()!=="") parts.push(cur.trim());
         return parts;
     }
 
@@ -38,19 +37,21 @@ async function executeFrenchLang(code, consoleFL, parentScope = null) {
         for (const v in localVars) expr = expr.replace(new RegExp(`\\b${v}\\b`, "g"), JSON.stringify(localVars[v]));
         for (const v in scope.variables) expr = expr.replace(new RegExp(`\\b${v}\\b`, "g"), JSON.stringify(scope.variables[v]));
         for (const v in scope.defs) expr = expr.replace(new RegExp(`\\b${v}\\b`, "g"), JSON.stringify(scope.defs[v]));
+
         const fnCall = expr.match(/^([a-zA-Z0-9_]+)\((.*)\)$/);
         if (fnCall && scope.functions[fnCall[1]]) {
             const fname = fnCall[1];
-            const args = await Promise.all(splitArgs(fnCall[2]||"").map(a => evalExpression(a, localVars)));
+            const args = await Promise.all(splitArgs(fnCall[2]||"").map(a=>evalExpression(a, localVars)));
             const funcLocalVars = {};
             scope.functions[fname].params.forEach((p,i)=>funcLocalVars[p]=args[i]);
             for (let line of scope.functions[fname].body) {
-                line = line.trim();
+                line=line.trim();
                 if (line.startsWith("retourner(")) return await evalExpression(parseArg(line,"retourner"), funcLocalVars);
                 for (const cmd in commands) if (line.startsWith(cmd+"(")) { await commands[cmd](parseArg(line,cmd), funcLocalVars); break; }
             }
             return undefined;
         }
+
         try { return await eval(expr); } catch { return expr; }
     }
 
@@ -63,10 +64,17 @@ async function executeFrenchLang(code, consoleFL, parentScope = null) {
 
     function joinAndLog(parts, fn) { fn(parts.map(toOutputText).join(" ")+"\n"); }
 
+    const colors = ["red","orange","yellow","green","cyan","blue","magenta"];
     const commands = {
         "console.msg": async (argText, localVars={}) => joinAndLog(await Promise.all(splitArgs(argText).map(p=>evalExpression(p, localVars))), consoleFL.msg),
         "console.att": async (argText, localVars={}) => joinAndLog(await Promise.all(splitArgs(argText).map(p=>evalExpression(p, localVars))), consoleFL.att),
         "console.err": async (argText, localVars={}) => joinAndLog(await Promise.all(splitArgs(argText).map(p=>evalExpression(p, localVars))), consoleFL.err),
+        "console.a67": async (argText, localVars={}) => {
+            const msg = String(await evalExpression(argText, localVars));
+            let fmt = "", styles = [];
+            for (let i=0;i<msg.length;i++) { fmt+="%c"+msg[i]; styles.push(`color:${colors[i%colors.length]}`); }
+            consoleFL.msg(fmt, ...styles);
+        },
         "var": async (argText, localVars={}) => { const idx=argText.indexOf("="); if(idx==-1) throw new Error("Syntaxe var incorrecte"); const name=argText.slice(0,idx).trim(); const val=argText.slice(idx+1).trim(); scope.variables[name]=await evalExpression(val, localVars); },
         "def": async (argText, localVars={}) => { const idx=argText.indexOf("="); if(idx==-1) throw new Error("Syntaxe def incorrecte"); const name=argText.slice(0,idx).trim(); if(scope.defs[name]) throw new Error(`def '${name}' déjà défini`); const val=argText.slice(idx+1).trim(); scope.defs[name]=await evalExpression(val, localVars); },
         "attendre": async argText => {
@@ -76,27 +84,14 @@ async function executeFrenchLang(code, consoleFL, parentScope = null) {
             else ms=parseFloat(t);
             if(isNaN(ms)) throw new Error(`Temps invalide pour attendre: ${argText}`);
             await new Promise(r=>setTimeout(r,ms));
-        }, "console.a67" = async (argText, localVars = {}) => {
-    const msg = await evalExpression(argText, localVars);
-    const text = String(msg);
-    const colors = ["red", "orange", "yellow", "green", "cyan", "blue", "magenta"];
-    let formatted = "";
-    const styles = [];
-
-    for (let i = 0; i < text.length; i++) {
-        formatted += "%c" + text[i];
-        styles.push(`color:${colors[i % colors.length]}`);
-    }
-
-    consoleFL.msg(formatted, ...styles);
-};
+        }
     };
 
     const lignes = code.split(/\r?\n/);
     let inComment=false, inFunction=null, buffer=[];
 
-    try {
-        for(let index=0; index<lignes.length; index++){
+    try{
+        for(let index=0;index<lignes.length;index++){
             let ligne=(lignes[index]||"").trim();
             if(ligne.startsWith("/*")) inComment=true;
             if(inComment){ if(ligne.endsWith("*/")) inComment=false; continue; }
@@ -115,7 +110,7 @@ async function executeFrenchLang(code, consoleFL, parentScope = null) {
             if(inFunction && ligne==="}") { inFunction=null; buffer=[]; continue; }
             if(inFunction) { buffer.push(ligne); continue; }
 
-            // Commandes globales
+            // Commandes globales ou fonctions
             let reconnue=false;
             for(const cmd in commands){
                 if(ligne.startsWith(cmd+"(")){
@@ -124,8 +119,6 @@ async function executeFrenchLang(code, consoleFL, parentScope = null) {
                     break;
                 }
             }
-
-            // Appel fonction utilisateur
             if(!reconnue){
                 const callFn = ligne.match(/^([a-zA-Z0-9_]+)\((.*)\)$/);
                 if(callFn && scope.functions[callFn[1]]) {
@@ -133,7 +126,6 @@ async function executeFrenchLang(code, consoleFL, parentScope = null) {
                     reconnue=true;
                 }
             }
-
             if(!reconnue) throw new Error(`Ligne ${index+1} non reconnue : ${ligne}`);
         }
     } catch(e){ consoleFL.err("Erreur : "+e.message+"\n"); }
