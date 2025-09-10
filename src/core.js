@@ -71,14 +71,19 @@ async function executeFrenchLang(code, consoleFL, parentScope = null) {
         "console.err": async (argText, localVars={}) => joinAndLog(await Promise.all(splitArgs(argText).map(p=>evalExpression(p, localVars))), consoleFL.err),
         "console.a67": async (argText, localVars={}) => {
             const parts = await Promise.all(splitArgs(argText).map(p => evalExpression(p, localVars)));
-            joinAndLog(parts, txt => {
-                // simple bleu
+            const txt = parts.map(toOutputText).join(" ");
+    
+            if (consoleFL && typeof consoleFL.a67 === "function") {
+                // Utiliser la version spéciale de l'éditeur
+                consoleFL.a67(txt + "\n");
+            } else {
+                // Fallback simple bleu (Node ou navigateur brut)
                 if (typeof document !== "undefined") {
                     console.log("%c" + txt, "color:blue");
                 } else {
                     console.log(txt);
                 }
-            });
+            }
         },
         "var": async (argText, localVars={}) => { const idx=argText.indexOf("="); if(idx==-1) throw new Error("Syntaxe var incorrecte"); const name=argText.slice(0,idx).trim(); const val=argText.slice(idx+1).trim(); scope.variables[name]=await evalExpression(val, localVars); },
         "def": async (argText, localVars={}) => { const idx=argText.indexOf("="); if(idx==-1) throw new Error("Syntaxe def incorrecte"); const name=argText.slice(0,idx).trim(); if(scope.defs[name]) throw new Error(`def '${name}' déjà défini`); const val=argText.slice(idx+1).trim(); scope.defs[name]=await evalExpression(val, localVars); },
