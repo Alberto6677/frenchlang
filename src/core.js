@@ -46,7 +46,7 @@ async function executeFrenchLang(code, consoleFL, parentScope = null) {
     }
 
     // Eval une valeur simple ou variable
-    function evalArg(arg, localVars = {}) {
+    async function evalArg(arg, localVars = {}) {
         arg = (arg || "").trim();
         if (arg === "") return "";
         if (localVars.hasOwnProperty(arg)) return localVars[arg];
@@ -55,7 +55,7 @@ async function executeFrenchLang(code, consoleFL, parentScope = null) {
         if ((arg.startsWith('"') && arg.endsWith('"')) || (arg.startsWith("'") && arg.endsWith("'"))) {
             try { return eval(arg); } catch {}
         }
-        try { return eval(arg); } catch { return arg; }
+        try { return await eval(arg); } catch { return arg; }
     }
 
     // Convertit un objet en texte
@@ -74,104 +74,97 @@ async function executeFrenchLang(code, consoleFL, parentScope = null) {
         fn(out + "\n");
     }
 
-   async function evalExpression(expr, localVars = {}) {
-    expr = expr.trim();
+    // Évalue une expression (async)
+    async function evalExpression(expr, localVars = {}) {
+        expr = expr.trim();
 
-    // Remplacer les variables locales et globales par leur valeur
-    for (const v in localVars) {
-        const re = new RegExp(`\\b${v}\\b`, "g");
-        expr = expr.replace(re, JSON.stringify(localVars[v]));
-    }
-    for (const v in scope.variables) {
-        const re = new RegExp(`\\b${v}\\b`, "g");
-        expr = expr.replace(re, JSON.stringify(scope.variables[v]));
-    }
-    for (const v in scope.defs) {
-        const re = new RegExp(`\\b${v}\\b`, "g");
-        expr = expr.replace(re, JSON.stringify(scope.defs[v]));
-    }
+        // Remplacer les variables locales et globales par leur valeur
+        for (const v in localVars) {
+            const re = new RegExp(`\\b${v}\\b`, "g");
+            expr = expr.replace(re, JSON.stringify(localVars[v]));
+        }
+        for (const v in scope.variables) {
+            const re = new RegExp(`\\b${v}\\b`, "g");
+            expr = expr.replace(re, JSON.stringify(scope.variables[v]));
+        }
+        for (const v in scope.defs) {
+            const re = new RegExp(`\\b${v}\\b`, "g");
+            expr = expr.replace(re, JSON.stringify(scope.defs[v]));
+        }
 
-    // Appel de fonction
-    const fnCall = expr.match(/^([a-zA-Z0-9_]+)\((.*)\)$/);
-    if (fnCall) {
-        const fname = fnCall[1];
-        const args = await Promise.all(splitArgs(callFn[2] || "").map(p => evalExpression(p)));
-        if (!scope.functions[fname]) throw new Error(`Fonction '${fname}' non définie`);
+        // Appel de fonction
+        const fnCall = expr.match(/^([a-zA-Z0-9_]+)\((.*)\)$/);
+        if (fnCall) {
+            const fname = fnCall[1];
+            const args = await Promise.all(splitArgs(fnCall[2] || "").map(a => evalExpression(a, localVars)));
+            if (!scope.functions[fname]) throw new Error(`Fonction '${fname}' non définie`);
 
-        const funcLocalVars = {};
-        scope.functions[fname].params.forEach((p, i) => funcLocalVars[p] = args[i]);
+            const funcLocalVars = {};
+            scope.functions[fname].params.forEach((p, i) => funcLocalVars[p] = args[i]);
 
-        for (let line of scope.functions[fname].body) {
-            line = line.trim();
-            if (line.startsWith("retourner(")) {
-                const retVal = parseArg(line, "retourner");
-                return await evalExpression(retVal, funcLocalVars);
-            }
-            for (const cmd in commands) {
-                if (line.startsWith(cmd + "(")) {
-                    const arg = parseArg(line, cmd);
-                    await commands[cmd](arg, funcLocalVars);
-                    break;
+            for (let line of scope.functions[fname].body) {
+                line = line.trim();
+                if (line.startsWith("retourner(")) {
+                    const retVal = parseArg(line, "retourner");
+                    return await evalExpression(retVal, funcLocalVars);
+                }
+                for (const cmd in commands) {
+                    if (line.startsWith(cmd + "(")) {
+                        const arg = parseArg(line, cmd);
+                        await commands[cmd](arg, funcLocalVars);
+                        break;
+                    }
                 }
             }
+            return undefined;
         }
-        return undefined;
-    }
 
-    // Sinon évaluer l’expression JS complète
-    try {
-        return eval(expr);
-    } catch {
-        return expr;
+        // Sinon évaluer l’expression JS complète
+        try {
+            return await eval(expr);
+        } catch {
+            return expr;
+        }
     }
-}
-
 
     // Commandes principales
     const commands = {
-        "console.msg": (argText, localVars = {}) => {
-            const parts = splitArgs(argText).map(p => evalExpression(p, localVars));
+        "console.msg": async (argText, localVars = {}) => {
+            const parts = await Promise.all(splitArgs(argText).map(p => evalExpression(p, localVars)));
             joinAndLog(parts, consoleFL.msg);
         },
-        "console.att": (argText, localVars = {}) => {
-            const parts = splitArgs(argText).map(p => evalExpression(p, localVars));
+        "console.att": async (argText, localVars = {}) => {
+            const parts = await Promise.all(splitArgs(argText).map(p => evalExpression(p, localVars)));
             joinAndLog(parts, consoleFL.att);
         },
-        "console.err": (argText, localVars = {}) => {
-            const parts = splitArgs(argText).map(p => evalExpression(p, localVars));
+        "console.err": async (argText, localVars = {}) => {
+            const parts = await Promise.all(splitArgs(argText).map(p => evalExpression(p, localVars)));
             joinAndLog(parts, consoleFL.err);
         },
-        "var": (argText, localVars = {}) => {
+        "var": async (argText, localVars = {}) => {
             const idx = argText.indexOf("=");
             if (idx === -1) throw new Error("Syntaxe var incorrecte");
             const name = argText.slice(0, idx).trim();
             const valueExpr = argText.slice(idx + 1).trim();
             if (!name) throw new Error("Nom de variable vide");
-            scope.variables[name] = evalExpression(valueExpr, localVars);
+            scope.variables[name] = await evalExpression(valueExpr, localVars);
         },
-        "def": (argText, localVars = {}) => {
+        "def": async (argText, localVars = {}) => {
             const idx = argText.indexOf("=");
             if (idx === -1) throw new Error("Syntaxe def incorrecte");
             const name = argText.slice(0, idx).trim();
             const valueExpr = argText.slice(idx + 1).trim();
             if (!name) throw new Error("Nom de def vide");
             if (scope.defs.hasOwnProperty(name)) throw new Error(`def '${name}' déjà défini`);
-            scope.defs[name] = evalExpression(valueExpr, localVars);
-        }, 
+            scope.defs[name] = await evalExpression(valueExpr, localVars);
+        },
         "attendre": async argText => {
             let t = argText.trim();
             let ms = 0;
-
-            if (t.endsWith("ms")) {
-                ms = parseFloat(t.slice(0, -2));
-            } else if (t.endsWith("s")) {
-                ms = parseFloat(t.slice(0, -1)) * 1000;
-            } else {
-                ms = parseFloat(t); // par défaut en ms
-            }
-
+            if (t.endsWith("ms")) ms = parseFloat(t.slice(0, -2));
+            else if (t.endsWith("s")) ms = parseFloat(t.slice(0, -1)) * 1000;
+            else ms = parseFloat(t);
             if (isNaN(ms)) throw new Error(`Temps invalide pour attendre: ${argText}`);
-
             await new Promise(resolve => setTimeout(resolve, ms));
         }
     };
@@ -208,7 +201,7 @@ async function executeFrenchLang(code, consoleFL, parentScope = null) {
             if (ligne.startsWith("var ") || ligne.startsWith("def ")) {
                 const cmd = ligne.startsWith("var ") ? "var" : "def";
                 const argText = ligne.slice(cmd.length).trim();
-                commands[cmd](argText);
+                await commands[cmd](argText);
                 continue;
             }
 
@@ -216,7 +209,7 @@ async function executeFrenchLang(code, consoleFL, parentScope = null) {
             const callFn = ligne.match(/^([a-zA-Z0-9_]+)\((.*)\)$/);
             if (callFn) {
                 const fname = callFn[1];
-                const args = await Promise.all(splitArgs(fnCall[2] || "").map(a => evalExpression(a, localVars)));
+                const args = await Promise.all(splitArgs(callFn[2] || "").map(p => evalExpression(p)));
                 if (!scope.functions[fname]) throw new Error(`Fonction '${fname}' non définie`);
 
                 const localVars = {};
@@ -227,12 +220,12 @@ async function executeFrenchLang(code, consoleFL, parentScope = null) {
                         line = line.trim();
                         if (line.startsWith("retourner(")) {
                             const retVal = parseArg(line, "retourner");
-                            throw { type: "return", value: evalExpression(retVal, localVars) };
+                            throw { type: "return", value: await evalExpression(retVal, localVars) };
                         }
                         for (const cmd in commands) {
                             if (line.startsWith(cmd + "(")) {
                                 const arg = parseArg(line, cmd);
-                                commands[cmd](arg, localVars);
+                                await commands[cmd](arg, localVars);
                                 break;
                             }
                         }
