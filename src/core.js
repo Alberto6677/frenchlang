@@ -9,7 +9,7 @@ async function executeFrenchLang(code, consoleFL, parentScope = null) {
     const scope = parentScope || { variables, defs, functions };
 
     function parseArg(ligne, cmd) {
-        const regex = new RegExp(`${cmd}\\((.*)\\)`);
+        const regex = new RegExp(`${cmd}\$begin:math:text$(.*)\\$end:math:text$`);
         const match = ligne.match(regex);
         return match ? match[1] : "";
     }
@@ -64,7 +64,6 @@ async function executeFrenchLang(code, consoleFL, parentScope = null) {
 
     function joinAndLog(parts, fn) { fn(parts.map(toOutputText).join(" ")+"\n"); }
 
-    const colors = ["red","orange","yellow","green","cyan","blue","magenta"];
     const commands = {
         "console.msg": async (argText, localVars={}) => joinAndLog(await Promise.all(splitArgs(argText).map(p=>evalExpression(p, localVars))), consoleFL.msg),
         "console.att": async (argText, localVars={}) => joinAndLog(await Promise.all(splitArgs(argText).map(p=>evalExpression(p, localVars))), consoleFL.att),
@@ -74,10 +73,8 @@ async function executeFrenchLang(code, consoleFL, parentScope = null) {
             const txt = parts.map(toOutputText).join(" ");
     
             if (consoleFL && typeof consoleFL.a67 === "function") {
-                // Utiliser la version spéciale de l'éditeur
                 consoleFL.a67(txt + "\n");
             } else {
-                // Fallback simple bleu (Node ou navigateur brut)
                 if (typeof document !== "undefined") {
                     console.log("%c" + txt, "color:blue");
                 } else {
@@ -85,8 +82,21 @@ async function executeFrenchLang(code, consoleFL, parentScope = null) {
                 }
             }
         },
-        "var": async (argText, localVars={}) => { const idx=argText.indexOf("="); if(idx==-1) throw new Error("Syntaxe var incorrecte"); const name=argText.slice(0,idx).trim(); const val=argText.slice(idx+1).trim(); scope.variables[name]=await evalExpression(val, localVars); },
-        "def": async (argText, localVars={}) => { const idx=argText.indexOf("="); if(idx==-1) throw new Error("Syntaxe def incorrecte"); const name=argText.slice(0,idx).trim(); if(scope.defs[name]) throw new Error(`def '${name}' déjà défini`); const val=argText.slice(idx+1).trim(); scope.defs[name]=await evalExpression(val, localVars); },
+        "var": async (argText, localVars={}) => { 
+            const idx=argText.indexOf("="); 
+            if(idx==-1) throw new Error("Syntaxe var incorrecte"); 
+            const name=argText.slice(0,idx).trim(); 
+            const val=argText.slice(idx+1).trim(); 
+            scope.variables[name]=await evalExpression(val, localVars); 
+        },
+        "def": async (argText, localVars={}) => { 
+            const idx=argText.indexOf("="); 
+            if(idx==-1) throw new Error("Syntaxe def incorrecte"); 
+            const name=argText.slice(0,idx).trim(); 
+            if(scope.defs[name]) throw new Error(`def '${name}' déjà défini`); 
+            const val=argText.slice(idx+1).trim(); 
+            scope.defs[name]=await evalExpression(val, localVars); 
+        },
         "attendre": async argText => {
             let t = argText.trim(), ms=0;
             if(t.endsWith("ms")) ms=parseFloat(t.slice(0,-2));
@@ -99,6 +109,7 @@ async function executeFrenchLang(code, consoleFL, parentScope = null) {
 
     const lignes = code.split(/\r?\n/);
     let inComment=false, inFunction=null, buffer=[];
+    let inLoop=null, loopCount=0, loopBuffer=[];
 
     try{
         for(let index=0;index<lignes.length;index++){
@@ -107,6 +118,7 @@ async function executeFrenchLang(code, consoleFL, parentScope = null) {
             if(inComment){ if(ligne.endsWith("*/")) inComment=false; continue; }
             if(!ligne||ligne.startsWith("#")) continue;
 
+            // Fonction
             if(ligne.startsWith("fonction ")){
                 const fnMatch = ligne.match(/^fonction\s+([a-zA-Z0-9_]+)\s*\((.*?)\)\s*{$/);
                 if(!fnMatch) throw new Error(`Syntaxe fonction invalide à la ligne ${index+1}`);
@@ -117,10 +129,50 @@ async function executeFrenchLang(code, consoleFL, parentScope = null) {
                 continue;
             }
 
-            if(inFunction && ligne==="}") { inFunction=null; buffer=[]; continue; }
-            if(inFunction) { buffer.push(ligne); continue; }
+            // Boucle Répéter
+            if(ligne.toLowerCase().startsWith("répéter")){
+                const loopMatch = ligne.match(/^Répéter\s*\((.*?)\)\s*fois\s*{$/i);
+                if(!loopMatch) throw new Error(`Syntaxe Répéter invalide à la ligne ${index+1}`);
+                loopCount = parseInt(await evalExpression(loopMatch[1]));
+                inLoop=true;
+                loopBuffer=[];
+                continue;
+            }
 
-            // Commandes globales ou fonctions
+            // Fermeture bloc (fonction ou boucle)
+            if((inFunction || inLoop) && ligne==="}") {
+                if(inFunction){
+                    inFunction=null; buffer=[];
+                } else if(inLoop){
+                    for(let i=0;i<loopCount;i++){
+                        for(const l of loopBuffer){
+                            let reconnue=false;
+                            for(const cmd in commands){
+                                if(l.startsWith(cmd+"(")){
+                                    await commands[cmd](parseArg(l,cmd));
+                                    reconnue=true;
+                                    break;
+                                }
+                            }
+                            if(!reconnue){
+                                const callFn = l.match(/^([a-zA-Z0-9_]+)\((.*)\)$/);
+                                if(callFn && scope.functions[callFn[1]]) {
+                                    await evalExpression(l);
+                                    reconnue=true;
+                                }
+                            }
+                            if(!reconnue) throw new Error(`Dans boucle: ligne non reconnue : ${l}`);
+                        }
+                    }
+                    inLoop=null; loopBuffer=[];
+                }
+                continue;
+            }
+
+            if(inFunction){ buffer.push(ligne); continue; }
+            if(inLoop){ loopBuffer.push(ligne); continue; }
+
+            // Commandes globales
             let reconnue=false;
             for(const cmd in commands){
                 if(ligne.startsWith(cmd+"(")){
