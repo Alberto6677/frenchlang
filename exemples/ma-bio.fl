@@ -1,2 +1,10 @@
 /* Exemple de biographie avec FrenchLang */
-console.msg("consolez")
+console.msg("Nom : [Met ton nom ici et retire les crochets] ")
+console.msg("Prénom : [Met ton prénom ici et retire les crochets] ")
+console.msg("Pseudo : [Met ton pseudo ici et retire les crochets] ")
+console.msg("Âge : [Met ton âge ici et retire les crochets] ")
+console.msg("Passion dans la vie: [Met ta passion dans la vie ici et retire les crochets] ")
+console.msg("Sport préféré : [Met ton sport préféré ici et retire les crochets] ")
+
+
+
