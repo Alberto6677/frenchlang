@@ -1,2 +1,2 @@
 /* Exemple de biographie avec FrenchLang */
-consolez
+console.msg("consolez")
