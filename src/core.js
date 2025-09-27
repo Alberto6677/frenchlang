@@ -9,7 +9,7 @@ async function executeFrenchLang(code, consoleFL, parentScope = null) {
     const scope = parentScope || { variables, defs, functions };
 
     function parseArg(ligne, cmd) {
-        const regex = new RegExp(`${cmd}\$begin:math:text$(.*)\\$end:math:text$$`);
+        const regex = new RegExp(`${cmd}\$begin:math:text$(.*)\\$end:math:text$`);
         const match = ligne.match(regex);
         return match ? match[1] : "";
     }
