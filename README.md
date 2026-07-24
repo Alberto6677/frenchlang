@@ -1,3 +1,6 @@
+# IMPORTANT ⚠️
+FrenchLang ne sera plus mit à jour, si possible veuillez utiliser LunaScript pour avoir accès aux dernières mises à jour
+Merci pour votre compréhension
 # FrenchLang (.fl)
 
 FrenchLang est un langage de programmation **100% en français**, simple et lisible, conçu pour le web et le backend.  
