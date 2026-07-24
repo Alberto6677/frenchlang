@@ -1,6 +1,8 @@
 # IMPORTANT ⚠️
 FrenchLang ne sera plus mit à jour, si possible veuillez utiliser LunaScript pour avoir accès aux dernières mises à jour.
 
+LunaScript : https://lunascript.onrender.com
+
 Merci pour votre compréhension.
 
 ---
